@@ -1,0 +1,370 @@
+import matplotlib.pyplot as plt
+import random as rd
+from matplotlib.animation import FuncAnimation
+import numpy as np
+
+print("start")
+#Variables globales
+longueurSalle = 1000  # a
+largeurSalle = 1500  # b
+tailleSortie = 40   # c #tailleSortie1
+nb_points = 5 # n
+points_sortis = 0 # nb de points sortis
+
+coordonnéesSorties=[[-longueurSalle/2,0]   ] #si ajout de sorties, c'est ici
+rayonPersonne=10
+modulateur=5 # a modifier si les points avancent trop ou pas assez vite
+epsilon=0.01
+coordonnéesObstacles = [[50,50,500]] # si ajout d'obstacles, c'est ici ; forme : [x,y,rayon]
+rayonDensité = 10
+#pour exploiter des données (penser au temps d'évacuation), cf dico en bas
+
+#,[0,0,50]
+nb_securite = 2
+
+
+
+
+
+def obstacles(liste_obstacle):
+    for i in liste_obstacle :
+        x = i[0]
+        y = i[1]
+        r = i[2]
+        circle = plt.Circle((x, y), r, edgecolor='black', facecolor='black')
+        ax.add_patch(circle)
+   
+'''Probleme : avec une liste de 2 ou plus éléments dans coordonnéesObstacles, fais planter l'animation,mais fonctionne 
+pourtant quand il n'y a pas l animation '''
+
+#Cette fonction donne l'égalité ou non de flottants
+def APeuPresEgale(a,b):
+    if a*(1-epsilon)<=b<= a*(1+epsilon):
+        return True
+    return False
+
+
+#Cette fonction crée une salle à partir de 5 droites
+def rectangle_1_trou(longueur, largeur, sortie):
+    x = np.array([-longueur/2, -longueur/2, longueur/2, longueur/2, -longueur/2, -longueur/2])
+    y = np.array([sortie/2, largeur/2, largeur/2, -largeur/2, -largeur/2, -sortie/2])
+    plt.plot(x, y, color='darkblue')
+    #plt.plot([-L/2, -L/2], [-h/2, h/2])
+
+
+
+#Cette fonction créé aléatoirement les coordonnées initiales des points
+def coordonnées(nb):
+    Coordonnées = []
+    while len(Coordonnées) < nb:
+        x, y = rd.uniform(0, longueurSalle), rd.uniform(0, largeurSalle)
+        x = x - longueurSalle/2
+        y = y - largeurSalle/2
+        if all(((j[0] - x)**2 + (j[1] - y)**2)**0.5 >= rayonPersonne for j in Coordonnées):
+            for obstacle in coordonnéesObstacles:  #obstacle : x_centre, y_centre, rayon
+                if ((obstacle[0] - x)**2 + (obstacle[1] - y)**2)**0.5 >= rayonPersonne + obstacle[2]:
+                    Coordonnées.append([x, y])
+    print("Coord")
+    print(Coordonnées)
+    return Coordonnées
+
+
+#Cette fonction créé aléatoirement les coordonnées initiales des agents de securité en prenant en compte 
+# la position des autres points
+
+def coordonnées_securite(nb, coord_pts):
+    Coordonnées = []
+    while len(Coordonnées) < nb:
+        x, y = rd.uniform(0, longueurSalle), rd.uniform(0, largeurSalle)
+        x = x - longueurSalle/2
+        y = y - largeurSalle/2
+        if all(((j[0] - x)**2 + (j[1] - y)**2)**0.5 >= rayonPersonne for j in Coordonnées):
+            if all(((k[0] - x)**2 + (k[1] - y)**2)**0.5 >= rayonPersonne for k in coord_pts):
+                for obstacle in coordonnéesObstacles:  #obstacle : x_centre, y_centre, rayon
+                    if ((obstacle[0] - x)**2 + (obstacle[1] - y)**2)**0.5 >= rayonPersonne + obstacle[2]:
+                        Coordonnées.append([x, y])
+    print("Coord_sécurité")
+    print(Coordonnées)
+    return Coordonnées
+
+'''PROBLEME: j ai fait plusieurs test avec un rayon très grand, et des points apparaissent quand même dans l'obstacle
+    Résolu : yay'''
+
+
+# fait apparaître des points sur le graphe représentant les personnes
+def personne(Coor):
+    for i in Coor:
+        plt.scatter(i[0], i[1], c='red', marker='o')
+        
+def agent_securite(Coor):
+    for i in Coor:
+        plt.scatter(i[0], i[1], c='yellow', marker='s')
+
+
+#Cette fonction renvoie la sortie la plus proche d'un point et la distance entre le point et la sortie
+def sortie_proche(coord):
+    distanceSortie= ( (coordonnéesSorties[0][0]+coord[0])**2  + (coordonnéesSorties[0][1]+coord[1])**2 )**(1/2)
+    indiceSortie=0
+    for i in range (len(coordonnéesSorties)):
+        if ( (coordonnéesSorties[i][0]+coord[0])**2  + (coordonnéesSorties[i][1]+coord[1])**2 )**(1/2) < distanceSortie :
+            indiceSortie = i
+            distanceSortie = ( (coordonnéesSorties[i][0]+coord[0])**2  + (coordonnéesSorties[i][1]+coord[1])**2 )**(1/2)
+    return coordonnéesSorties[indiceSortie] , distanceSortie
+
+
+def distance_sortie(coord):
+    _,distanceSortie =sortie_proche(coord)
+    return distanceSortie
+
+
+
+#Cette fonction renvoie les coordonnées du point où la personne peut s'avancer s'il n'y a pas d'obstacles
+def avance_hypothétique(coord):
+    x=coord[0]
+    y=coord[1]
+    [xf ,yf] , distanceSortie = sortie_proche(coord)
+    direction_unitaire=(((xf-x)**2 + (yf-y)**2)**(1/2))
+    vecteur_direction=[xf-x,yf-y]
+    if(direction_unitaire!=0):
+        vecteur_normal = [(xf-x)/direction_unitaire,(yf-y)/direction_unitaire]
+    else :
+        vecteur_normal = [-1,0]
+    print("direction_unitaire")
+    print(direction_unitaire)
+    print("vecteur_direction")
+    print(vecteur_direction)
+    print("vecteur_normal")
+    print(vecteur_normal)
+#_si proche de la sortie, avance directement vers celle-ci en conservant le même y
+
+    point_final = [x+vecteur_normal[0]*modulateur , y+vecteur_normal[1]*modulateur]
+#verification éventuelles bon fonctionnement
+    #plt.plot([x,point_final[0] ],[y, point_final[1] ], linestyle='- -',color='red')
+
+    return point_final
+
+
+def droite(point1, point2):
+    [x1, y1] = point1
+    [x2, y2] = point2
+    if x2 - x1 != 0:
+        pente = (y2 - y1) / (x2 - x1)
+        ordonnee_origine = y1 - pente * x1
+        return [pente,ordonnee_origine]
+    else:
+        return [x1,0]
+
+def intersection_cercle_droite(centre_cercle, rayon_cercle, point1, point2):
+    a, b = droite(point1, point2)
+    Xc, Yc = centre_cercle
+
+    delta_polynome = (2 * (a * (b - Yc) - Xc))**2 - 4 * (1 + a**2) * (Xc**2 + (b - Yc)**2 - rayon_cercle**2)
+
+    if delta_polynome < 0:
+        return []  # pas de points d'intersections possibles
+    else:
+        x1 = (-2 * (a * (b - Yc) - Xc) - delta_polynome**0.5) / (2 * (1 + a**2))
+        x2 = (-2 * (a * (b - Yc) - Xc) + delta_polynome**0.5) / (2 * (1 + a**2))
+        return [[x1, a * x1 + b], [x2, a * x2 + b]]
+
+
+
+def distance(point1,point2):
+    return ((point1[0]-point2[0])**2+(point1[1]-point2[1])**2)**1/2
+
+
+
+
+
+
+
+def est_entre_deux_points(point1, point2, point_test):
+    x1, y1 = point1
+    x2, y2 = point2
+    [x, y ]= point_test
+
+    # Vérifier si le point test est sur la droite
+    if (x - x1) * (y2 - y1) == (x2 - x1) * (y - y1):
+        # Le point test est sur la droite, vérifier s'il est entre les deux points
+        if min(x1, x2) <= x <= max(x1, x2) and min(y1, y2) <= y <= max(y1, y2):
+            return True
+    return False
+
+
+
+
+# Si les solutions déterminées précédemment sont trop éloignées on ne les prends pas en compte
+def intersections_cercle_segment(centre_cercle, rayon_cercle, point_depart, point_arrive):
+    sol_potentielles = intersection_cercle_droite(centre_cercle, rayon_cercle, point_depart, point_arrive)
+    sol_retenues = []
+    if sol_potentielles == []:
+        return sol_retenues
+    for sol in sol_potentielles:
+        if est_entre_deux_points(point_depart, point_arrive, sol)==True:
+            sol_retenues.append(sol)
+    return sol_retenues#Renvoie les coordonnées des points d'intersections éventuels entre un segment et un cercle sous forme de liste
+
+
+# def densité(toute_coor, point, rayon_densité):
+#     point_dans_rayon=0
+#     for coor in toute_coor :
+#         if distance (coor, point)<= rayon_densité :
+#             point_dans_rayon+=1
+
+#     if 0 <= point_dans_rayon <=3:
+#         return 1
+#     if 4<= point_dans_rayon <= 5:
+#         return 0.75
+#     if 6<= point_dans_rayon <= 7:
+#         return 0.5
+#     else:
+#         return 0.25
+
+'''Pour exploitation des données, chercher la reduction de la vitesse d'une personne 
+en fonction du nombre d'individus et relier avec les baisse de vitesses observées sans la fonction
+ densité''' 
+
+
+
+#Cette fonction définit jusqu'où un point peut avanceret sa 'vitesse' : 1=100%, <1 pas vitesse max
+def PeutAvancer(coor_point, coor_secu ,coor_locale):
+    point_final = avance_hypothétique(coor_locale)
+    toute_coor =coor_point + coor_secu
+    print("pt final")
+    print(point_final)
+    liste_intersection_non_vide=[]
+    for i in range (len(toute_coor)):
+        if intersections_cercle_segment(toute_coor[i] , rayonPersonne, coor_locale, point_final)!=[]:
+            liste_intersection_non_vide.append(toute_coor[i])
+
+
+    for i in range(len(liste_intersection_non_vide))    :
+        #si c'est le même point, on ne s'en préoccupe pas
+        if APeuPresEgale(coor_locale[0], liste_intersection_non_vide[i][0])==False or APeuPresEgale(coor_locale[1], liste_intersection_non_vide[i][1])==False :
+
+
+            for intersection in intersections_cercle_segment(liste_intersection_non_vide[i] , rayonPersonne, coor_locale, point_final) :
+                return min (( (intersection[0]-coor_locale[0])**2+(intersection[1]-coor_locale[1])**2 )**1/2   )
+            
+            
+######AJOUT CONDITION OBSTACLE
+                
+            
+
+#s'il n'y a pas d'obstacles
+    return point_final #vitesse ?
+
+
+    
+    
+    
+    
+    
+
+fig, ax = plt.subplots()
+ax.set_xlim(-longueurSalle-20, longueurSalle+20)
+ax.set_ylim(-largeurSalle-10, largeurSalle+10)
+
+
+points = [ax.plot([0], [0], 'ro', markersize=5, marker='o')[0] for j in range(nb_points)]
+points_securite = [ax.plot([0], [0], 'yellow', markersize=5, marker='s')[0] for j in range(nb_securite)]
+
+coor_pts = coordonnées(nb_points)  #liste de nb_points listes
+coor_secu = coordonnées_securite(nb_securite, coor_pts) 
+
+"""tous les points doivent bien être a des coord différentes:  ok"""
+#pour exploiter les données; ce dico associe à chaque point, sa sortie et sa distance par rapport à celle-ci
+
+
+
+
+#initialisation animation (création de la salle, des obstacles et des coordonnées des points)
+def init():
+    print("init")
+    rectangle_1_trou(longueurSalle, largeurSalle, tailleSortie)
+    obstacles(coordonnéesObstacles)
+    for point, coor in zip(points, coor_pts):
+        point.set_data(coor)
+    return points
+
+def animate(i):
+    print("animate")
+    global coor_pts
+    global coor_secu
+    global points_sortis
+
+    # Trie les coordonnées par distance à la sortie
+    coor_pts.sort(key=lambda x: distance_sortie(x))
+
+    # Liste temporaire pour stocker les coordonnées mises à jour
+    updated_coor_pts = []
+    updated_coor_secu = []
+    
+    for position_secu in range(len(coor_secu)):
+        # Obtenir les coordonnées actuelles
+        x, y = coor_secu[position_secu]
+
+        # Si le point est déjà sorti, ne pas le déplacer
+        if x <= -longueurSalle / 2:
+            points_securite[position_secu].set_data(x-1*modulateur, y)
+            updated_coor_secu.append([x-1*modulateur, y])
+            continue
+
+        if APeuPresEgale(x,longueurSalle/2) and APeuPresEgale(y,largeurSalle/2):
+            points_securite[position_secu].set_data(x-1*modulateur, y)
+            updated_coor_secu.append([x-1*modulateur, y])
+            continue
+
+        # Calculer les nouvelles coordonnées en utilisant PeutAvancer
+        new_position = PeutAvancer(coor_pts, coor_secu, [x, y])
+
+        # Ajoute à la liste temporaire seulement si les coordonnées ne dépassent pas les limites
+        if not (APeuPresEgale(new_position[0],-longueurSalle/2) and -tailleSortie/2 <= new_position[1] <= tailleSortie/2):
+            updated_coor_secu.append(new_position)
+
+        # Met à jour la position du point
+        points[position_secu].set_data(new_position[0], new_position[1])
+
+
+
+    for position in range(len(coor_pts)):
+        # Obtenir les coordonnées actuelles
+        x, y = coor_pts[position]
+
+        # Si le point est déjà sorti, ne pas le déplacer
+        if x <= -longueurSalle / 2:
+            points[position].set_data(x-1*modulateur, y)
+            updated_coor_pts.append([x-1*modulateur, y])
+            continue
+
+        if APeuPresEgale(x,longueurSalle/2) and APeuPresEgale(y,largeurSalle/2):
+            points[position].set_data(x-1*modulateur, y)
+            updated_coor_pts.append([x-1*modulateur, y])
+            continue
+
+        # Calculer les nouvelles coordonnées en utilisant PeutAvancer
+        new_position = PeutAvancer(coor_pts,coor_secu, [x, y])
+
+        # Ajoute à la liste temporaire seulement si les coordonnées ne dépassent pas les limites
+        if not (APeuPresEgale(new_position[0],-longueurSalle/2) and -tailleSortie/2 <= new_position[1] <= tailleSortie/2):
+            updated_coor_pts.append(new_position)
+
+        # Met à jour la position du point
+        points[position].set_data(new_position[0], new_position[1])
+
+    # Met à jour la liste coor_pts avec la nouvelle liste
+    coor_pts = updated_coor_pts
+    #print(updated_coor_pts)
+    # Compte le nombre de points sortis
+    points_sortis = sum(1 for coor in coor_pts if coor[0] <= -longueurSalle/2)
+
+    # Si tous les points sont sortis, arrêtez l'animation
+    if points_sortis == nb_points + nb_securite:
+        print("fin")
+        ani.event_source.stop()
+
+    return points
+
+ani = FuncAnimation(fig, animate, init_func=init, frames=20, interval=10, repeat=True)
+plt.show()
+
